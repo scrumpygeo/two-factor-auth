@@ -9,7 +9,7 @@ const app = express()
 // middleware to allow use of app.body later when we verify token
 app.use(express.json())
 
-// initialize db
+// i. initialize db
 const db = new JsonDB(new Config('myDatabase', true, false, '/'))
 
 // Register user & create temp secret (unam & pwd would go here too)
@@ -32,7 +32,7 @@ app.get('/api', (req, res) =>
   res.json({ message: 'This is the 2-factor authentication eg.' })
 )
 
-// Verify token and make secret permanent
+// ii. Verify token and make secret permanent (changes temp_secret to secret in db)
 app.post('/api/verify', (req, res) => {
   const { token, userId } = req.body
 
@@ -53,6 +53,34 @@ app.post('/api/verify', (req, res) => {
       res.json({ verified: true })
     } else {
       res.json({ verified: false })
+    }
+  } catch (error) {
+    console.log(error)
+    res.status(500).json({ message: 'Error finding user' })
+  }
+})
+
+// iii. Validate a token - can be used repeadedly with new auth token
+app.post('/api/validate', (req, res) => {
+  const { token, userId } = req.body
+
+  try {
+    const path = `/user/${userId}`
+    const user = db.getData(path)
+
+    const { base32: secret } = user.secret
+
+    const tokenValidates = speakeasy.totp.verify({
+      secret,
+      encoding: 'base32',
+      token,
+      window: 1,
+    })
+
+    if (tokenValidates) {
+      res.json({ validated: true })
+    } else {
+      res.json({ validated: false })
     }
   } catch (error) {
     console.log(error)
